@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Arknights Costume Survey Form</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" href="survey.css">
+</head>
+<body>
+<h1 id="title">Arknights Costume Survey Form</h1>
+<p id="description">Thank you for taking the time to help us improve our game</p>
+<form id="survey-form">
+<label for="name" id="name-label">Name <input type="text" id="name" placeholder="Enter your name" required /></label>
+<label for="email" id="email-label">Email <input type="email" id="email" placeholder="Enter your email" required /></label>
+<label for="number" id=
+"number-label">Age <input type="number" id="number" max="120" min="12" placeholder="Enter your age" />
+<label for="account">Account Number <input type="text" id="account" pattern="[0-9]{9,}" placeholder="Enter your account number" required/>
+<label for="dropdown" id="dropdown-label">How do you rate the New Year costumes?
+<select id="dropdown">
+<option value="">(select one)</option>
+<option value="5">Perfect! I love all of them</option>
+<option value="4">Good, I think they are nice</option>
+<option value="3">OK, not too bad</option>
+<option value="2">Terrible! I hate them</option>
+<option value="1">THEY ARE UGLY I WANT TO KILL HYPERGRYPH</option>
+</select>
+<div class="dont-change">
+<label>Have you bought any of the New Year costumes?
+<label for="yes"><input type="radio" id="yes" name="buy-or-not" value="1" required/> Yes, I have</label>
+<label for="no"><input type="radio" id="no" name="buy-or-not" value="0" required/> No, I haven't</label>
+</label>
+<label>If yes, which costumes have you bought? (check all that apply)
+<label for="Zhao-Bing-Lun"><input type="checkbox" id="Zhao-Bing-Lun" name="buy-costume" value="1" /> Zhao Bing Lun</label>
+<label for="Deng-Ru-Zhou"><input type="checkbox" id="Deng-Ru-Zhou" name="buy-costume" value="2" /> Deng Ru Zhou</label>
+<label for="Zhuo-Ying"><input type="checkbox" id="Zhuoying" name="buy-costume" value="3" /> Zhuo-Ying</label>
+</div>
+<label for="comment">If no, please leave your comment
+<textarea id="comment" placeholder="Enter your comment here" rows="5" cols="30"></textarea>
+</label>
+<input type="submit" id="submit" value="Submit" />
+</form>
+</body>
+</html>

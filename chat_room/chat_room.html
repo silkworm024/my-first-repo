@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Chat Room</title>
+    <meta charset="utf-8" />
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+      #create_room,
+      #private_message {
+        position: absolute;
+        right: 10%;
+        top: 10%;
+      }
+      #rooms,
+      #room_users {
+        position: absolute;
+        right: 10%;
+        top: 50%;
+      }
+      label {
+        display: block;
+      }
+      p,
+      button {
+        margin: 5px;
+      }
+      .single_room {
+        padding: 10px;
+        border: solid black 1px;
+        margin: 5px;
+      }
+      hr {
+        width: 50%;
+        text-align: left;
+        margin-left: 0;
+      }
+      #lobby {
+        width: 50%;
+        border: solid black 1px;
+        padding: 10px;
+      }
+      .title {
+        color:blue;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 class="title">Multi-room Chat</h1>
+    <div id="login_place">
+      <div id="login_form">
+        <label for="username"
+          >Username <input id="username" type="text" maxlength="30" required
+        /></label>
+        <button type="button" id="login">Login</button>
+      </div>
+    </div>
+    <div id="create_room"></div>
+    <div id="rooms"></div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="text/javascript">
+      let username = "";
+      let socketio = io.connect();
+
+      //back from private room to mainpage, reload all elements
+      const page1 = function () {
+        $("#message_display").remove();
+        $("#room_send").remove();
+        $("#room_name").remove();
+        $("#back_button").remove();
+        $("#room_users").remove();
+        $("#private_message").remove();
+        $("#kick_and_ban_form").remove();
+        $("#invite_form").remove();
+        login();
+      };
+
+      //generate login form
+      const login_form = function () {
+        if ($("#login_form") != null) {
+          $("#login_form").remove();
+        }
+        const form = $("<div>", { id: "login_form" });
+        const label = $("<div>", { for: "username" }).text("Username");
+        label.append(
+          $("<input>", {
+            type: "text",
+            id: "username",
+            maxlength: "30",
+            required: true,
+          })
+        );
+        form.append(label);
+        const button = $("<button>", { type: "button", id: "login" }).text(
+          "Login"
+        );
+        button.on("click", login_check);
+        form.append(button);
+        $("#login_place").append(form);
+      };
+
+      //part of login action, check if the user already exists
+      const login_check = function () {
+        username = $("#username").val();
+        if (username == "") {
+          alert("Username can't be null");
+          return;
+        }
+        socketio.emit("login", { name: username });
+        socketio.off("login_back");
+        socketio.on("login_back", function (data) {
+          if (data["success"]) {
+            login();
+          } else {
+            alert("User already exits!");
+          }
+        });
+      };
+
+      //actual_login,generate greeting and elements on mainpage
+      const login = function () {
+        $("#username").val("");
+        $("#login_form").remove();
+        if ($("#greeting") != null) {
+          $("#greeting").remove();
+        }
+        if ($("#send_form") != null) {
+          $("#send_form").remove();
+        }
+        if ($("#create_form") != null) {
+          $("#create_form").remove();
+        }
+        const greeting = $("<div>", { id: "greeting" });
+        greeting.append($("<h1>").text("Hi, " + username));
+        const button = $("<button>", { type: "button" }).text("Logout");
+        button.on("click", logout);
+        greeting.append(button);
+        $("#login_place").append(greeting);
+        send_form();
+        create_room_form();
+        socketio.emit("get_rooms_request");
+        get_rooms();
+        word_filter();
+      };
+
+      //logout action, remove elements on the mainpage and delete user on the server side
+      const logout = function () {
+        socketio.emit("logout", { name: username });
+        username = "";
+        $("#greeting").remove();
+        $("h1").remove();
+        $("#lobby").remove();
+        $("#all_rooms").remove();
+        $("#word_form").remove();
+        $("body").prepend($("<h1>").text("Multi-room Chat"));
+        login_form();
+        $("#send_form").remove();
+        $("#create_form").remove();
+      };
+
+      //generate send message form
+      const send_form = function () {
+        if ($("#lobby").length == 0) {
+          $("body").append($("<div>", { id: "lobby" }));
+        }
+        const form = $("<div>", { id: "send_form" });
+        form.append(
+          $("<input>", {
+            type: "text",
+            id: "message",
+            placeholder: "Enter your message",
+            required: true,
+          })
+        );
+        const button = $("<button>", { type: "button" }).text("Send");
+        button.on("click", send_message);
+        form.append(button);
+        $("#lobby").append(form);
+      };
+
+      //send message to all users, communicate with server
+      const send_message = function () {
+        let message = $("#message").val();
+        $("#message").val("");
+        socketio.emit("message_to_server", {
+          message: message,
+          name: username,
+        });
+      };
+
+      //receive lobby message from server
+      const get_message = function () {
+        socketio.on("message_to_client", function (data) {
+          $("#lobby").append($("<strong>").text(data["name"]));
+          $("#lobby").append($("<p>").text(data["message"]));
+          $("#lobby").append($("<hr>"));
+        });
+      };
+
+      //generate create room form
+      const create_room_form = function () {
+        const form = $("<div>", { id: "create_form" });
+        form.append($("<h2>").text("Create Room"));
+        const label = $("<label>", { for: "room_name" }).text("Room name");
+        label.append(
+          $("<input>", {
+            type: "text",
+            id: "room_name",
+            placeholder: "Enter room name",
+            required: true,
+          })
+        );
+        const label2 = $("<label>", { for: "password" }).text(
+          "Password(optional)"
+        );
+        label2.append(
+          $("<input>", {
+            type: "text",
+            id: "password",
+            placeholder: "Enter password",
+          })
+        );
+        const button = $("<button>", { type: "button" }).text("Create");
+        button.on("click", create_room);
+        form.append(label);
+        form.append(label2);
+        form.append(button);
+        $("#create_room").append(form);
+      };
+
+      //room create action
+      const create_room = function () {
+        const name = $("#room_name").val();
+        if (name == "") {
+          alert("Room name can't be null");
+          return;
+        }
+        $("#room_name").val("");
+        if ($("#password").val() != "") {
+          password = $("#password").val();
+          $("#password").val("");
+          socketio.emit("create_room", {
+            name: name,
+            user: username,
+            password: password,
+          });
+        } else {
+          socketio.emit("create_room", { name: name, user: username });
+        }
+        socketio.off("create_room_back");
+        socketio.on("create_room_back", function (data) {
+          if (data["success"]) {
+            private_room(name);
+          } else {
+            alert("Room already exists");
+          }
+        });
+      };
+
+      //generate a private room, delete elements on the mainpage
+      const private_room = function (name) {
+        $("#greeting").remove();
+        $("#create_form").remove();
+        $("#send_form").remove();
+        $("#lobby").remove();
+        $("#all_rooms").remove();
+        $("#word_form").remove();
+        $("private_message").remove();
+        $(".invite_massage_receive").remove();
+        $("body").append($("<h1>", { id: "room_name" }).text(name));
+        get_users();
+        const form = $("<div>", { id: "room_send" });
+        form.append(
+          $("<input>", {
+            type: "text",
+            id: "room_message",
+            placeholder: "Enter your message",
+            required: true,
+          })
+        );
+        const button = $("<button>", { type: "button" }).text("Send");
+        button.on("click", function (event) {
+          send_room_message(name);
+        });
+        form.append(button);
+        const button_back = $("<button>", {
+          type: "button",
+          id: "back_button",
+        }).text("Back");
+        button_back.on("click", function (event) {
+          leave_room(name);
+          page1();
+        });
+        $("body").append(button_back);
+        $("body").append(form);
+        $("body").append($("<div>", { id: "message_display" }));
+        const private_message = $("<div>", { id: "private_message" });
+        private_message.append($("<h2>").text("Private Message"));
+        const label = $("<label>", { for: "to_user" }).text("To");
+        label.append(
+          $("<input>", { type: "text", id: "to_user", required: true })
+        );
+        private_message.append(label);
+        private_message.append(
+          $("<input>", {
+            type: "text",
+            id: "message_user",
+            placeholder: "Enter your message",
+            required: true,
+          })
+        );
+        const message_button = $("<button>", { type: "button" }).text("Send");
+        message_button.on("click", function (event) {
+          send_private_message(name);
+        });
+        private_message.append(message_button);
+        private_message.append($("<div>", { id: "private_message_display" }));
+        $("body").append(private_message);
+        get_private_message();
+        invite(name);
+        kick_and_ban(name);
+        kick_and_ban_message();
+      };
+
+      //communicate with server to send a room only messsage
+      const send_room_message = function (name) {
+        let message = $("#room_message").val();
+        $("#room_message").val("");
+        socketio.emit("room_message", {
+          message: message,
+          name: username,
+          room: name,
+        });
+      };
+
+      //get the list of current users in a room from server
+      const get_users = function () {
+        socketio.on("get_users", function (data) {
+          if ($("#room_users") != null) {
+            $("#room_users").remove();
+          }
+          $("body").append($("<div>", { id: "room_users" }));
+          $("#room_users").append($("<h2>").text("Users"));
+          for (let i = 0; i < data["users"].length; i++) {
+            $("#room_users").append($("<p>").text(data["users"][i]));
+          }
+        });
+      };
+
+      //get private from another room user
+      const get_private_message = function () {
+        socketio.on("get_private_message", function (data) {
+          $("#private_message_display").append(
+            $("<strong>").text("From " + data["from"])
+          );
+          $("#private_message_display").append($("<p>").text(data["message"]));
+          $("#private_message_display").append($("<hr>"));
+        });
+      };
+
+      //send a private message to a user in the same room, communicate with server
+      const send_private_message = function (name) {
+        let user = $("#to_user").val();
+        if (user == "") {
+          alert("Username can't be empty");
+          return;
+        }
+        $("#to_user").val("");
+        let message = $("#message_user").val();
+        $("#message_user").val("");
+        socketio.emit("private_message", {
+          user: user,
+          message: message,
+          room: name,
+        });
+        socketio.off("private_message_back");
+        socketio.on("private_message_back", function (data) {
+          if (data["message"] == "1") {
+            alert("Can't send message to yourself");
+          }
+          if (data["message"] == "2") {
+            alert("User is not in the room");
+          }
+        });
+      };
+
+      //receive general room message from server
+      const get_room_message = function () {
+        socketio.on("room_message_back", function (data) {
+          console.log(data["message"]);
+          $("#message_display").append($("<strong>").text(data["name"]));
+          $("#message_display").append($("<p>").text(data["message"]));
+          $("#message_display").append($("<hr>"));
+        });
+      };
+
+      //display all rooms on the mainpage, update every time someone join/leave the room
+      const get_rooms = function () {
+        socketio.on("get_rooms", function (data) {
+          if ($("#greeting").length > 0) {
+            if ($("#all_rooms") != null) {
+              $("#all_rooms").remove();
+            }
+            const all_rooms = $("<div>", { id: "all_rooms" });
+            all_rooms.append($("<h2>").text("Rooms"));
+            if (data["success"]) {
+              for (const key in data["rooms"]) {
+                const one_room = $("<div>", { class: "single_room" });
+                one_room.append($("<strong>").text(key));
+                for (let i = 0; i < data["rooms"][key].users.length; i++) {
+                  one_room.append($("<p>").text(data["rooms"][key].users[i]));
+                }
+                const button = $("<button>", { type: "button" }).text("Join");
+                button.on("click", function (event) {
+                  join_room(key);
+                });
+                one_room.append(button);
+                all_rooms.append(one_room);
+              }
+            } else {
+              all_rooms.append(
+                $("<p>", { class: "single_room" }).text("There are no rooms")
+              );
+            }
+            $("#rooms").append(all_rooms);
+          }
+        });
+      };
+
+      //join room action
+      const join_room = function (name) {
+        socketio.emit("join_room", { room: name });
+        socketio.off("join_room_fail");
+        socketio.on("join_room_fail", function () {
+          alert("You are banned from joining this room");
+        });
+        socketio.off("private_room");
+        socketio.once("private_room", function (data) {
+          if (data["success"]) {
+            join_password_room(name);
+          } else {
+            console.log(name);
+            private_room(name);
+          }
+        });
+      };
+
+      //join a room with password
+      const join_password_room = function (name) {
+        if ($("#password_form") != null) {
+          $("#password_form").remove();
+        }
+        const div = $("<div>", { id: "password_form" });
+        const label = $("<label>", { for: "password_check" }).text("Password");
+        label.append(
+          $("<input>", {
+            type: "text",
+            id: "password_check",
+            placeholder: "Enter password",
+          })
+        );
+        const button = $("<button>", { type: "button" }).text("Join");
+        button.on("click", function (event) {
+          const password = $("#password_check").val();
+          if (password == "") {
+            alert("Password can't be empty");
+            return;
+          }
+          $("#password_check").val("");
+          socketio.emit("join_password_room", {
+            room: name,
+            password: password,
+          });
+          socketio.off("password_back");
+          socketio.on("password_back", function (data) {
+            if (data["success"]) {
+              private_room(name);
+            } else {
+              alert("Password incorrect");
+            }
+          });
+        });
+        div.append(label);
+        div.append(button);
+        $("#all_rooms").append(div);
+      };
+
+      //send an invite message to a user who is not in the room
+      const invite = function (name) {
+        if ($("#invite_form") != null) {
+          $("#invite_form").remove();
+        }
+        const div = $("<div>", { id: "invite_form" });
+        div.append($("<h2>").text("Invite a user to the room"));
+        div.append(
+          $("<input>", {
+            type: "text",
+            id: "invite_user",
+            placeholder: "Enter username",
+          })
+        );
+        const button = $("<button>", { type: "button" }).text("Invite");
+        button.on("click", function (event) {
+          const invite = $("#invite_user").val();
+          $("#invite_user").val("");
+          if (invite == "") {
+            alert("Username can't be empty");
+            return;
+          }
+          socketio.emit("invite_user", { room: name, user: invite });
+        });
+        div.append(button);
+        $("body").append(div);
+        socketio.off("invite_back");
+        socketio.on("invite_back", function (data) {
+          if (!data["success"]) {
+            alert("User doesn't exist or already in the room");
+          }
+        });
+      };
+
+      //listen for invite messages
+      const get_invite_message = function () {
+        socketio.on("invite_message", function (data) {
+          alert("Someone sends you an invite");
+          let id = "#" + data["from"];
+          if ($(id) != null) {
+            $(id).remove();
+          }
+          const div = $("<div>", {
+            id: data["from"],
+            class: "invite_massage_receive",
+          });
+          div.append(
+            $("<p>").text(
+              data["from"] + " invites you to join room " + data["room"]
+            )
+          );
+          const button1 = $("<button>", { type: "button" }).text("Accept");
+          const button2 = $("<button>", { type: "button" }).text("Decline");
+          button1.on("click", function (event) {
+            socketio.emit("accept_invite", { room: data["room"] });
+            $(id).remove();
+            $(".invite_massage_receive").remove();
+          });
+          button2.on("click", function (event) {
+            $(id).remove();
+          });
+          div.append(button1);
+          div.append(button2);
+          $("body").append(div);
+          accept_invite();
+        });
+      };
+
+      //accept an invite, user is directed to the room
+      const accept_invite = function () {
+        socketio.off("accept_invite_back");
+        socketio.on("accept_invite_back", function (data) {
+          if (data["success"]) {
+            console.log("back");
+            leave_room(data["leave"]);
+            page1();
+            join_room(data["room"]);
+          } else {
+            join_room(data["room"]);
+          }
+        });
+      };
+
+      //generate kick out and ban forms
+      const kick_and_ban = function (name) {
+        socketio.emit("check_owner", { room: name });
+        socketio.off("check_owner_back");
+        socketio.on("check_owner_back", function (data) {
+          if (data["success"]) {
+            const div = $("<div>", { id: "kick_and_ban_form" });
+            div.append($("<h2>").text("Kick a user out"));
+            div.append(
+              $("<input>", {
+                type: "text",
+                id: "kick_user",
+                placeholder: "Enter username",
+              })
+            );
+            const button = $("<button>", { type: "button" }).text("Kick");
+            button.on("click", function (event) {
+              const username = $("#kick_user").val();
+              $("#kick_user").val("");
+              if (username == "") {
+                alert("Username can't be empty");
+                return;
+              }
+              socketio.emit("kick_user", { name: username, room: name });
+            });
+            socketio.off("kick_user_fail");
+            socketio.on("kick_user_fail", function () {
+              alert("User is not in the room or can't kick out yourself");
+            });
+            div.append(button);
+            div.append($("<h2>").text("Ban a user"));
+            div.append(
+              $("<input>", {
+                type: "text",
+                id: "ban_user",
+                placeholder: "Enter username",
+              })
+            );
+            const button2 = $("<button>", { type: "button" }).text("Ban");
+            button2.on("click", function (event) {
+              const ban_name = $("#ban_user").val();
+              $("#ban_user").val("");
+              if (ban_name == "") {
+                alert("Username can't be empty");
+                return;
+              }
+              socketio.emit("ban_user", { name: ban_name, room: name });
+            });
+            socketio.off("ban_user_fail");
+            socketio.on("ban_user_fail", function () {
+              alert("User doesn't exist or can't ban your self");
+            });
+            div.append(button2);
+            $("body").append(div);
+          }
+        });
+      };
+
+      //receive kick and ban message from room owner
+      const kick_and_ban_message = function () {
+        socketio.on("kick_out_message", function (data) {
+          alert("You are kicked out");
+          leave_room(data["room"]);
+          page1();
+        });
+        socketio.on("ban_message", function (data) {
+          alert("You are banned from the room");
+          leave_room(data["room"]);
+          page1();
+        });
+      };
+
+      //generate the from to add a word filter for all users
+      const word_filter = function () {
+        if ($("#word_form") != null) {
+          $("#word_form").remove();
+        }
+        const div = $("<div>", { id: "word_form" });
+        div.append($("<h2>").text("Add a filtered word"));
+        div.append(
+          $("<input>", {
+            type: "text",
+            id: "word_filter",
+            placeholder: "Enter the word",
+          })
+        );
+        const button = $("<button>", { type: "button" }).text("Add");
+        button.on("click", function (event) {
+          const word = $("#word_filter").val();
+          $("#word_filter").val("");
+          if (word == "") {
+            alert("word can't be empty");
+            return;
+          }
+          socketio.emit("add_word", { word: word });
+        });
+        div.append(button);
+        $("body").append(div);
+        socketio.off("add_word_back");
+        socketio.on("add_word_back", function () {
+          alert("Filter already exists");
+        });
+      };
+
+      //leave room, happening when someone click "back" or disconnect
+      const leave_room = function (name) {
+        socketio.emit("leave_room", { room: name });
+      };
+
+      //apply the listeners
+      get_message();
+      get_room_message();
+      get_invite_message();
+
+      //initial event listener on login button
+      $("#login").on("click", login_check);
+    </script>
+  </body>
+</html>
